@@ -9,6 +9,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./PurchaseAndSaleAgreement.sol";
 
 import "./libraries/AccessManager.sol";
+import "./interfaces/ICashDistributor.sol";
 import "./interfaces/IInterestRateController.sol";
 import "./interfaces/IStatusController.sol";
 
@@ -22,6 +23,7 @@ contract MortgageController is AccessManager {
     address public propertyManager;
     address public interestRateController;
     address public statusControllerAddress;
+    address public cashDistributor;
 
     // mortgage conditions
     IERC20 currency;
@@ -46,6 +48,7 @@ contract MortgageController is AccessManager {
         address _purchaseAddress,
         address _currencyAddress,
         address _statusControllerAddress,
+        address _cashDistributor,
         uint256 _lenderTokenAmount,
         uint256 _borrowerTokenAmount
     ) {
@@ -53,6 +56,7 @@ contract MortgageController is AccessManager {
         borrower = _borrower;
         purchaseAddress = _purchaseAddress;
         statusControllerAddress = _statusControllerAddress;
+        cashDistributor = _cashDistributor;
         currency = IERC20(_currencyAddress);
         lenderTokenAmount = _lenderTokenAmount;
         borrowerTokenAmount = _borrowerTokenAmount;
@@ -91,51 +95,17 @@ contract MortgageController is AccessManager {
         lastAccruedInterest = block.timestamp;
     }
 
-    function distributePropertyCashflows() public recalculatesDebt {
-        uint256 balance = IERC20(currency).balanceOf(address(this));
-
+    function distributeCashflow() public recalculatesDebt {
         uint256 status = IStatusController(statusControllerAddress).status();
 
-        if (status == 0) {
-            SafeERC20.safeTransferFrom(
-                currency,
-                address(this),
-                lender,
-                balance
-            );
-        } else if (status == 1) {
-            uint256 lenderAmount = balance / 2;
-            uint256 borrowerAmount = balance - lenderAmount;
-            SafeERC20.safeTransferFrom(
-                currency,
-                address(this),
-                lender,
-                lenderAmount
-            );
-            SafeERC20.safeTransferFrom(
-                currency,
-                address(this),
-                borrower,
-                borrowerAmount
-            );
-        } else if (status == 2) {
-            uint256 lenderAmount = balance / 3;
-            uint256 borrowerAmount = balance - lenderAmount;
-            SafeERC20.safeTransferFrom(
-                currency,
-                address(this),
-                lender,
-                lenderAmount
-            );
-            SafeERC20.safeTransferFrom(
-                currency,
-                address(this),
-                borrower,
-                borrowerAmount
-            );
-        } else {
-            revert("MortgageController: INVALID_STATUS");
-        }
+        uint256 balance = IERC20(currency).balanceOf(address(this));
+        SafeERC20.safeTransfer(currency, cashDistributor, balance);
+
+        uint256 lenderPayment = ICashDistributor(cashDistributor).distribute(
+            status
+        );
+
+        outstandingBalance -= lenderPayment;
     }
 
     function accrueInterest() internal onlySender(propertyManager) {
@@ -151,11 +121,12 @@ contract MortgageController is AccessManager {
             1e18;
     }
 
-    function repay(address from, uint256 amount)
+    function repay(uint256 amount)
         external
-        onlySender(lender)
+        onlySender(borrower)
         recalculatesDebt
     {
-        SafeERC20.safeTransferFrom(currency, from, address(this), amount);
+        SafeERC20.safeTransferFrom(currency, borrower, lender, amount);
+        outstandingBalance -= amount;
     }
 }
