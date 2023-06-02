@@ -26,16 +26,16 @@ contract MortgageController is AccessManager {
     address public cashDistributor;
 
     // mortgage conditions
-    IERC20 currency;
+    IERC20 public currency;
 
-    uint256 lenderTokenAmount;
-    uint256 borrowerTokenAmount;
+    uint256 public lenderTokenAmount;
+    uint256 public borrowerTokenAmount;
 
     // mortgage status
 
     bool initialized;
-    uint256 outstandingBalance;
-    uint256 lastAccruedInterest;
+    uint256 public outstandingBalance;
+    uint256 public lastAccruedInterest;
 
     modifier recalculatesDebt() {
         accrueInterest();
@@ -47,6 +47,7 @@ contract MortgageController is AccessManager {
         address _borrower,
         address _purchaseAddress,
         address _currencyAddress,
+        address _interestRateController,
         address _statusControllerAddress,
         address _cashDistributor,
         uint256 _lenderTokenAmount,
@@ -55,11 +56,13 @@ contract MortgageController is AccessManager {
         lender = _lender;
         borrower = _borrower;
         purchaseAddress = _purchaseAddress;
+        interestRateController = _interestRateController;
         statusControllerAddress = _statusControllerAddress;
         cashDistributor = _cashDistributor;
         currency = IERC20(_currencyAddress);
         lenderTokenAmount = _lenderTokenAmount;
         borrowerTokenAmount = _borrowerTokenAmount;
+        propertyManager = msg.sender;
     }
 
     function init() external {
@@ -116,9 +119,10 @@ contract MortgageController is AccessManager {
         uint256 effectiveInterestRate = (accruedTime * interestRate) /
             (365 days);
 
-        outstandingBalance =
-            (outstandingBalance * effectiveInterestRate) /
-            1e18;
+        uint256 accumulatedInterest = (outstandingBalance *
+            effectiveInterestRate) / 1e18;
+
+        outstandingBalance += accumulatedInterest;
     }
 
     function repay(uint256 amount)
