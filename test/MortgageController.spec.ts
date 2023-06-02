@@ -7,6 +7,7 @@ import {
   FixedInterestRateController,
   IncomeStatusController,
   MintableToken,
+  MockCashDistributor,
   MortgageController,
 } from "../typechain-types";
 import { BigNumber } from "ethers";
@@ -15,7 +16,7 @@ describe("MortgageController", () => {
   let mortgageController: MortgageController;
   let interestRateController: FixedInterestRateController;
   let statusController: IncomeStatusController;
-  let cashDistributor: CashDistributor;
+  let mockCashDistributor: MockCashDistributor;
 
   let mintableToken: MintableToken;
 
@@ -41,11 +42,9 @@ describe("MortgageController", () => {
       .getContractFactory("IncomeStatusController")
       .then((cf) => cf.deploy());
 
-    cashDistributor = await ethers
-      .getContractFactory("CashDistributor")
-      .then((cf) =>
-        cf.deploy(mintableToken.address, lender.address, borrower.address)
-      );
+    mockCashDistributor = await ethers
+      .getContractFactory("MockCashDistributor")
+      .then((cf) => cf.deploy());
 
     const mockedPurchaseAgreement = await ethers
       .getContractFactory("MockPurchaseAndSaleAgreement")
@@ -61,7 +60,7 @@ describe("MortgageController", () => {
           mintableToken.address,
           interestRateController.address,
           statusController.address,
-          cashDistributor.address,
+          mockCashDistributor.address,
           LENDER_AMOUNT,
           BORROWER_AMOUNT
         )
@@ -76,7 +75,7 @@ describe("MortgageController", () => {
       statusController.address
     );
     expect(await mortgageController.cashDistributor()).to.equal(
-      cashDistributor.address
+      mockCashDistributor.address
     );
     expect(await mortgageController.lenderTokenAmount()).to.equal(
       LENDER_AMOUNT
@@ -132,6 +131,18 @@ describe("MortgageController", () => {
       expect(await mortgageController.outstandingBalance()).to.be.equal(
         expectedOutstandingBalance
       );
+    });
+  });
+
+  describe("Cash distriubtion", () => {
+    it("distributed correctly", async () => {
+      const MINTED_AMOUNT = "1000000000000000000";
+      await mintableToken.mint(mortgageController.address, MINTED_AMOUNT);
+      await mortgageController.distributeCashflow();
+
+      expect(
+        await mintableToken.balanceOf(mockCashDistributor.address)
+      ).to.be.equal(MINTED_AMOUNT);
     });
   });
 });

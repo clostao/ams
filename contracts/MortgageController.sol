@@ -112,6 +112,11 @@ contract MortgageController is AccessManager {
     }
 
     function accrueInterest() internal onlySender(propertyManager) {
+        outstandingBalance = recalculateOutstandingBalance();
+        lastAccruedInterest = block.timestamp;
+    }
+
+    function recalculateOutstandingBalance() public view returns (uint256) {
         uint256 interestRate = IInterestRateController(interestRateController)
             .get();
 
@@ -122,7 +127,7 @@ contract MortgageController is AccessManager {
         uint256 accumulatedInterest = (outstandingBalance *
             effectiveInterestRate) / 1e18;
 
-        outstandingBalance += accumulatedInterest;
+        return outstandingBalance + accumulatedInterest;
     }
 
     function repay(uint256 amount)
